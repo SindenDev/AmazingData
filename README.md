@@ -1,6 +1,6 @@
 # AmazingData 数据采集项目
 
-通过中国银河证券星耀数智（AmazingData）SDK 拉取 A 股市场数据，并将结果写为 Parquet 文件。
+通过中国银河证券星耀数智（AmazingData）SDK 拉取 A 股市场数据，并将结果写为 Parquet 文件，可选同步到 RustFS / Iceberg / ClickHouse。
 
 ## 项目目标
 
@@ -28,7 +28,7 @@ amazingdata/
     ├── cli.py                     # 统一 CLI 入口
     ├── client.py                  # SDK 登录封装
     ├── writer.py                  # Parquet 写入（zstd）+ 自动同步
-    ├── storage.py                 # S3 上传 + Iceberg 表管理
+    ├── storage.py                 # S3 上传 + Iceberg / ClickHouse 表管理
     ├── incremental.py             # 增量逻辑
     ├── cache.py                   # SDK 缓存路径规范化
     ├── sdk_helpers.py             # SDK 返回值处理工具
@@ -81,7 +81,7 @@ amazingdata/
 - 统一 Parquet 输出入口
 - 使用 `zstd` 压缩
 - 自动创建输出目录并记录日志
-- 当 `SYNC_ENABLED=true` 时，写完后自动同步到 RustFS + Iceberg
+- 当 `SYNC_ENABLED=true` 时，写完后自动同步到已配置目标（RustFS + Iceberg / ClickHouse）
 
 ### [`incremental.py`](src/incremental.py)
 
@@ -102,9 +102,10 @@ amazingdata/
 
 ### [`storage.py`](src/storage.py)
 
-- S3 上传（boto3）+ Iceberg 表管理（PyIceberg SqlCatalog）
+- S3 上传（boto3）+ Iceberg 表管理（PyIceberg SqlCatalog）+ ClickHouse 写入
 - `upload_to_s3()` — 上传单个文件到 S3
 - `sync_to_iceberg()` — 将 DataFrame 写入 Iceberg 表（append 或 overwrite）
+- `sync_to_clickhouse()` — 将 DataFrame 写入 ClickHouse 表（append 或 overwrite）
 - `filename_to_table_name()` — 文件名映射为 Iceberg 表名
 - `infer_sync_mode()` — 推断写入模式（日 K 文件用 append，其余用 overwrite）
 
@@ -131,6 +132,12 @@ amazingdata/
 | `RUSTFS_SECRET_KEY` | RustFS Secret Key |
 | `RUSTFS_BUCKET` | RustFS Bucket 名称 |
 | `SYNC_ENABLED` | 是否在 fetch 后自动同步（true/false） |
+| `CLICKHOUSE_HOST` | ClickHouse 地址 |
+| `CLICKHOUSE_PORT` | ClickHouse Native 端口 |
+| `CLICKHOUSE_USER` | ClickHouse 用户名 |
+| `CLICKHOUSE_PASSWORD` | ClickHouse 密码 |
+| `CLICKHOUSE_DB` | ClickHouse 数据库名 |
+| `CLICKHOUSE_INSERT_CHUNK_SIZE` | ClickHouse 分块写入行数 |
 | `LOG_LEVEL` | 日志级别 |
 | `LOG_DIR` | 日志目录 |
 
@@ -190,7 +197,7 @@ python -m amazingdata_fetcher fetch kline --type stock --start-date 20130101 --e
 python -m amazingdata_fetcher cleanup --month 202603
 ```
 
-同步数据到 RustFS / Iceberg：
+同步数据到 RustFS / Iceberg / ClickHouse：
 
 ```bash
 # 同步所有本地 Parquet
@@ -199,7 +206,7 @@ python -m amazingdata_fetcher sync
 # 同步指定文件
 python -m amazingdata_fetcher sync --file info_stock_basic.parquet
 
-# 仅上传到 S3（不写 Iceberg）
+# 仅上传到 S3（不写 Iceberg / ClickHouse）
 python -m amazingdata_fetcher sync --s3-only
 ```
 

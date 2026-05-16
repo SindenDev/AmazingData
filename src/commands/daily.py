@@ -3,7 +3,7 @@
 三阶段执行：
   1. kline 缺口检测与补拉
   2. 全量 fetcher 执行（各 fetcher 内部增量逻辑自动补差值）
-  3. 同步到 RustFS / Iceberg
+  3. 同步到已配置目标（RustFS / Iceberg / ClickHouse）
 
 各 fetcher 通过 subprocess 在独立进程中运行，隔离 SDK segfault 风险。
 

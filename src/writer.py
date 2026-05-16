@@ -18,18 +18,10 @@ def write_parquet(df: pd.DataFrame, output_dir: str, filename: str) -> str:
 
 
 def _auto_sync(df: pd.DataFrame, filepath: str, filename: str) -> None:
-    """写完后自动同步到 S3 + Iceberg。"""
+    """写完后自动同步到已配置的存储目标。"""
     try:
-        from amazingdata_fetcher.storage import (
-            filename_to_table_name,
-            infer_sync_mode,
-            sync_to_iceberg,
-            upload_to_s3,
-        )
+        from amazingdata_fetcher.storage import sync_file_to_targets
 
-        upload_to_s3(filepath)
-        table_name = filename_to_table_name(filename)
-        mode = infer_sync_mode(filename)
-        sync_to_iceberg(df, table_name, mode=mode)
+        sync_file_to_targets(df, filepath, filename)
     except Exception:
         logger.exception(f"自动同步失败: {filename}（本地文件已写入，不影响数据采集）")

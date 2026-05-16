@@ -224,13 +224,14 @@ SDK 还提供四类金融算子，用于量化计算（非数据拉取接口）�
 
 ## 数据同步架构
 
-本地 Parquet 文件通过两条路径同步到远端存储：
+本地 Parquet 文件通过三条路径同步到远端存储：
 
 1. **S3 上传** — 文件原样上传到 `s3://amazingdata/parquet/{filename}`（via boto3）
 2. **Iceberg 表注册** — DataFrame 写入 Apache Iceberg 表（via PyIceberg SqlCatalog）
+3. **ClickHouse 写入** — DataFrame 写入 ClickHouse MergeTree 表（via clickhouse-driver）
 
 同步触发方式：
-- **自动同步**：`SYNC_ENABLED=true` 时，`write_parquet()` 写完本地文件后自动触发 S3 上传 + Iceberg 写入
+- **自动同步**：`SYNC_ENABLED=true` 时，`write_parquet()` 写完本地文件后自动触发所有已配置目标的同步
 - **手动同步**：`python -m amazingdata_fetcher sync` 命令批量或按文件同步
 
 Iceberg Catalog 配置：

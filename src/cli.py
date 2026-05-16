@@ -76,11 +76,11 @@ def _build_parser() -> argparse.ArgumentParser:
                            help="要处理的年月 YYYYMM，默认上个月")
 
     # -- sync 子命令 --
-    sync_p = sub.add_parser("sync", help="同步本地 Parquet 到 RustFS / Iceberg")
+    sync_p = sub.add_parser("sync", help="同步本地 Parquet 到 RustFS / Iceberg / ClickHouse")
     sync_p.add_argument("--file", default=None,
                         help="只同步指定文件名（如 info_stock_basic.parquet）")
     sync_p.add_argument("--s3-only", action="store_true",
-                        help="仅上传到 S3，不写 Iceberg 表")
+                        help="仅上传到 S3，不写 Iceberg / ClickHouse")
 
     # -- daily 子命令 --
     daily_p = sub.add_parser("daily", help="每日定时采集（缺口补全 + 全量 fetcher + 同步）")
@@ -108,11 +108,7 @@ def _handle_sync(output_dir: str, args: argparse.Namespace) -> None:
     import pandas as pd
 
     from amazingdata_fetcher.storage import (
-        filename_to_table_name,
-        infer_sync_mode,
-        sync_directory_to_s3,
-        sync_to_iceberg,
-        upload_to_s3,
+        sync_file_to_targets,
     )
 
     if args.file:
@@ -120,23 +116,20 @@ def _handle_sync(output_dir: str, args: argparse.Namespace) -> None:
         if not os.path.exists(filepath):
             logger.error(f"文件不存在: {filepath}")
             return
-        upload_to_s3(filepath)
-        if not args.s3_only:
-            df = pd.read_parquet(filepath)
-            table_name = filename_to_table_name(args.file)
-            mode = infer_sync_mode(args.file)
-            sync_to_iceberg(df, table_name, mode=mode)
+        df = pd.read_parquet(filepath)
+        sync_file_to_targets(df, filepath, args.file, s3_only=args.s3_only)
     else:
-        sync_directory_to_s3(output_dir)
-        if not args.s3_only:
-            for fname in sorted(os.listdir(output_dir)):
-                if not fname.endswith(".parquet"):
-                    continue
-                filepath = os.path.join(output_dir, fname)
-                df = pd.read_parquet(filepath)
-                table_name = filename_to_table_name(fname)
-                mode = infer_sync_mode(fname)
-                sync_to_iceberg(df, table_name, mode=mode)
+        synced_any = False
+        for fname in sorted(os.listdir(output_dir)):
+            if not fname.endswith(".parquet"):
+                continue
+            filepath = os.path.join(output_dir, fname)
+            df = pd.read_parquet(filepath)
+            sync_file_to_targets(df, filepath, fname, s3_only=args.s3_only)
+            synced_any = True
+        if not synced_any:
+            logger.warning(f"目录下没有可同步的 parquet 文件: {output_dir}")
+            return
 
     logger.info("同步完成")
 
