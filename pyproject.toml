@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amazingdata-fetcher"
+version = "0.2.0"
+requires-python = "==3.12.*"
+dependencies = [
+    "pyarrow",
+    "pandas",
+    "tables",
+    "python-dotenv",
+    "loguru",
+    "pyiceberg[s3fs]>=0.7.0",
+    "boto3",
+    "sqlalchemy",
+    "AmazingData",
+    "tgw",
+]
+
+[project.scripts]
+amazingdata-fetcher = "amazingdata_fetcher.cli:main"
+
+[tool.setuptools]
+packages = ["amazingdata_fetcher", "amazingdata_fetcher.fetcher", "amazingdata_fetcher.commands", "amazingdata_fetcher.dags"]
+
+[tool.setuptools.package-dir]
+amazingdata_fetcher = "src"
+"amazingdata_fetcher.fetcher" = "src/fetcher"
+"amazingdata_fetcher.commands" = "src/commands"
+"amazingdata_fetcher.dags" = "src/dags"
+
+[tool.uv]
+index-url = "https://mirrors.aliyun.com/pypi/simple/"
+find-links = ["docs/deps"]
+
+[tool.pip.find-links]
+wheel = "./wheel"

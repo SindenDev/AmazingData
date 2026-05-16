@@ -1,0 +1,11 @@
+venv/
+data/
+logs/
+deps/
+__pycache__/
+.env
+.DS_Store
+.obsidian/
+.claude/
+*.egg-info
+*.log

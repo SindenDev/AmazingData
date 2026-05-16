@@ -1,0 +1,22 @@
+# AmazingData 每日数据采集定时任务
+#
+# 使用方法:
+#   1. 编辑 crontab: crontab -e
+#   2. 粘贴下面的行（替换 /path/to 为实际路径）
+#   3. 确保 .env 文件已配置好 SDK 凭证和 RustFS 密钥
+#
+# 注意:
+#   - 时间为服务器本地时间，如服务器在 UTC 需改为 08:00 (UTC+8 的 16:00)
+#   - 脚本内部通过 SDK 交易日历判断是否为交易日，非交易日自动跳过
+#   - 脚本自动扫描近 30 个交易日的 kline 缺口并补拉
+#   - 其他 fetcher（margin/finance/index 等）内置增量逻辑，重跑即补全差值
+#   - 日志追加到 logs/daily_fetch.log
+
+# ── 每日数据采集 + 缺口补全（服务器时区 Asia/Shanghai）─────────────
+0 16 * * 1-5 cd /path/to/AmazingData && /path/to/venv/bin/python -m amazingdata_fetcher daily >> logs/daily_fetch.log 2>&1
+
+# ── 如果服务器时区为 UTC ────────────────────────────────────────
+# 0 8 * * 1-5 cd /path/to/AmazingData && /path/to/venv/bin/python -m amazingdata_fetcher daily >> logs/daily_fetch.log 2>&1
+
+# ── 月度清理（每月 2 日 01:00 合并上月 kline 日文件）──────────────
+# 0 1 2 * * cd /path/to/AmazingData && /path/to/venv/bin/python -m amazingdata_fetcher cleanup >> logs/monthly_cleanup.log 2>&1
