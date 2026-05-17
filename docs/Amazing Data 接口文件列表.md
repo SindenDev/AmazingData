@@ -40,13 +40,13 @@
 | `finance_income_history.parquet` | 利润表 | 客户端增量 | `get_income` | `InfoData` | `FinanceFetcher` | `amazingdata.finance_income_history` | overwrite |
 | `margin_summary_history.parquet` | 融资融券汇总 | 客户端增量 | `get_margin_summary` | `InfoData` | `MarginFetcher` | `amazingdata.margin_summary_history` | overwrite |
 | `margin_detail_history.parquet` | 融资融券明细 | 客户端增量 | `get_margin_detail` | `InfoData` | `MarginFetcher` | `amazingdata.margin_detail_history` | overwrite |
-| `extra_stock_{date}.parquet` | 股票日 K 线 | 每日独立文件 | `query_kline` | `MarketData` | `KlineFetcher` | `amazingdata.extra_stock_daily` | append |
-| `extra_index_{date}.parquet` | 指数日 K 线 | 每日独立文件 | `query_kline` | `MarketData` | `KlineFetcher` | `amazingdata.extra_index_daily` | append |
-| `extra_etf_{date}.parquet` | ETF 日 K 线 | 每日独立文件 | `query_kline` | `MarketData` | `KlineFetcher` | `amazingdata.extra_etf_daily` | append |
+| `extra_stock_{date}.parquet` | 股票日 K 线 | 每日独立文件 | `query_kline` | `MarketData` | `KlineFetcher` | `amazingdata.extra_stock_history` | append |
+| `extra_index_{date}.parquet` | 指数日 K 线 | 每日独立文件 | `query_kline` | `MarketData` | `KlineFetcher` | `amazingdata.extra_index_history` | append |
+| `extra_etf_{date}.parquet` | ETF 日 K 线 | 每日独立文件 | `query_kline` | `MarketData` | `KlineFetcher` | `amazingdata.extra_etf_history` | append |
 
 ### 月度数据清理
 
-股票价格、指数、ETF 数据为每日增量获取。每月 2 日由 `MonthlyCleanup` 将上月日文件合并为历史文件（`extra_stock_history.parquet`、`extra_index_history.parquet`、`extra_etf_history.parquet`），并删除已合并的日文件。合并后的历史文件对应 Iceberg 表 `amazingdata.extra_{type}_history`，同步模式为 overwrite。
+股票价格、指数、ETF 数据为每日增量获取。每月 2 日由 `MonthlyCleanup` 将上月日文件合并为历史文件（`extra_stock_history.parquet`、`extra_index_history.parquet`、`extra_etf_history.parquet`），并删除已合并的日文件。ClickHouse 在日同步阶段已按交易日增量写入 `extra_{type}_history`；月度合并文件同步时为全量覆写。
 
 ### 基础设施接口
 

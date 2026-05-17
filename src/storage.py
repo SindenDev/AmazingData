@@ -229,7 +229,7 @@ def _prepare_clickhouse_json_payload(df: pd.DataFrame) -> bytes:
     return "\n".join(lines).encode("utf-8")
 
 
-def _execute_clickhouse_http(
+def _execute_clickhouse(
     query: str,
     data: bytes | None = None,
     *,
@@ -255,7 +255,7 @@ def _execute_clickhouse_http(
         return resp.read()
 
 
-def _sync_to_clickhouse_http(
+def _sync_to_clickhouse(
     df: pd.DataFrame,
     table_name: str,
     mode: str,
@@ -265,18 +265,21 @@ def _sync_to_clickhouse_http(
     column_list: str,
 ) -> None:
     database = str(_clickhouse_config()["database"])
-    _execute_clickhouse_http(
+    _execute_clickhouse(
         f"CREATE DATABASE IF NOT EXISTS {_quote_clickhouse_ident(database)}",
         database="default",
     )
 
     if mode == "overwrite":
-        _execute_clickhouse_http(f"DROP TABLE IF EXISTS {qualified_table}")
+        _execute_clickhouse(f"DROP TABLE IF EXISTS {qualified_table}")
 
-    _execute_clickhouse_http(
+    _execute_clickhouse(
         f"CREATE TABLE IF NOT EXISTS {qualified_table} "
         f"({columns_sql}) ENGINE = MergeTree ORDER BY tuple()"
     )
+
+    if mode == "append":
+        _delete_clickhouse_kline_overlap(df, qualified_table)
 
     if df.empty:
         logger.info(f"ClickHouse 写入完成: {qualified_table} ({mode}, 0 行)")
@@ -286,7 +289,7 @@ def _sync_to_clickhouse_http(
     for start in range(0, len(df), chunk_size):
         chunk = df.iloc[start:start + chunk_size]
         payload = _prepare_clickhouse_json_payload(chunk)
-        _execute_clickhouse_http(
+        _execute_clickhouse(
             f"INSERT INTO {qualified_table} ({column_list}) FORMAT JSONEachRow",
             data=payload,
         )
@@ -295,7 +298,11 @@ def _sync_to_clickhouse_http(
 
 
 def filename_to_clickhouse_table_name(filename: str) -> str:
-    return filename_to_table_stem(filename)
+    m = _DAILY_PATTERN.match(filename)
+    if m:
+        # ClickHouse 仅维护 history 表；日文件按日增量 append 到 history
+        return f"extra_{m.group(1)}_history"
+    return filename.removesuffix(".parquet")
 
 
 def sync_to_clickhouse(
@@ -325,6 +332,9 @@ def sync_to_clickhouse(
             f"({columns_sql}) ENGINE = MergeTree ORDER BY tuple()"
         )
 
+        if mode == "append":
+            _delete_clickhouse_kline_overlap(df, client, qualified_table)
+
         if df.empty:
             logger.info(f"ClickHouse 写入完成: {qualified_table} ({mode}, 0 行)")
             return
@@ -339,7 +349,7 @@ def sync_to_clickhouse(
         logger.info(f"ClickHouse 写入完成: {qualified_table} ({mode}, {len(df)} 行)")
     except NetworkError as exc:
         logger.warning(f"ClickHouse Native 连接失败，回退 HTTP 接口: {exc}")
-        _sync_to_clickhouse_http(
+        _sync_to_clickhouse(
             df,
             table_name,
             mode,
@@ -347,6 +357,50 @@ def sync_to_clickhouse(
             columns_sql=columns_sql,
             column_list=column_list,
         )
+
+
+def _kline_delete_window(df: pd.DataFrame) -> tuple[pd.Timestamp, pd.Timestamp] | None:
+    if "kline_time" not in df.columns or df.empty:
+        return None
+    ts = pd.to_datetime(df["kline_time"], errors="coerce").dropna()
+    if ts.empty:
+        return None
+    start = ts.min().floor("D")
+    end = ts.max().floor("D") + pd.Timedelta(days=1)
+    return start, end
+
+
+def _delete_clickhouse_kline_overlap(
+    df: pd.DataFrame,
+    client,
+    qualified_table: str,
+) -> None:
+    window = _kline_delete_window(df)
+    if window is None:
+        return
+    start, end = window
+    client.execute(
+        f"ALTER TABLE {qualified_table} DELETE WHERE "
+        f"{_quote_clickhouse_ident('kline_time')} >= toDateTime64('{start:%Y-%m-%d %H:%M:%S}', 6) "
+        f"AND {_quote_clickhouse_ident('kline_time')} < toDateTime64('{end:%Y-%m-%d %H:%M:%S}', 6) "
+        "SETTINGS mutations_sync = 1"
+    )
+
+
+def _delete_clickhouse_kline_overlap(
+    df: pd.DataFrame,
+    qualified_table: str,
+) -> None:
+    window = _kline_delete_window(df)
+    if window is None:
+        return
+    start, end = window
+    _execute_clickhouse(
+        f"ALTER TABLE {qualified_table} DELETE WHERE "
+        f"{_quote_clickhouse_ident('kline_time')} >= toDateTime64('{start:%Y-%m-%d %H:%M:%S}', 6) "
+        f"AND {_quote_clickhouse_ident('kline_time')} < toDateTime64('{end:%Y-%m-%d %H:%M:%S}', 6) "
+        "SETTINGS mutations_sync = 1"
+    )
 
 
 # ── Iceberg Catalog ─────────────────────────────────────────────
